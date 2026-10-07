@@ -1,0 +1,22 @@
+# regenerable artifacts, deliberately not tracked
+acts_*.npy
+acts_meta.json
+fire_counts/
+*.jsonl
+sweep.log
+logs/
+
+# third-party source fetched at setup time, not vendored (see README Provenance)
+dlref/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# os
+.DS_Store
+Thumbs.db

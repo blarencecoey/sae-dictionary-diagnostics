@@ -1,0 +1,16 @@
+# Pinned where a pin is load-bearing, loose otherwise.
+#
+# transformers<5 is REQUIRED: sae-lens declares that ceiling, and transformers 5.x
+# relocated the GPT-NeoX tokenizer module, which breaks activation collection for the
+# Pythia models used here. 4.57.6 was the newest release below the boundary at the time
+# of writing.
+transformers==4.57.6
+
+torch>=2.0
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+matplotlib>=3.7
+datasets>=2.14
+huggingface_hub>=0.20
+sae-lens>=6.5

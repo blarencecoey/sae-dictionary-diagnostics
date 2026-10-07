@@ -14,6 +14,41 @@ Numbers below are as of this commit and are reproducible from the code and table
 
 ---
 
+## What is being measured
+
+A sparse autoencoder (SAE) rewrites a model's internal activation `x` as a sparse
+combination of learned directions — the columns of its decoder — and reconstructs it as
+`x_hat`. Each diagnostic here looks at a different part of that process:
+
+```mermaid
+flowchart LR
+    x["<b>x</b><br/>activation<br/>Pythia-160M, layer 8, d = 768"]
+    f["<b>f</b><br/>sparse code<br/>16,384 latents, few active"]
+    W["<b>decoder W_dec</b><br/>one direction per latent"]
+    xh["<b>x_hat</b><br/>reconstruction"]
+    r["<b>r = x − x_hat</b><br/>residual"]
+
+    x -->|encoder| f
+    f --> W
+    W --> xh
+    x --> r
+    xh --> r
+
+    subgraph diagnostics [" "]
+        D1["<b>Liveness and feature density</b><br/>how often each latent fires<br/>findings 2, 4"]
+        D2["<b>Decoder geometry</b><br/>are live directions near-duplicates?<br/>finding 1"]
+        D3["<b>Shrinkage decomposition</b><br/>why is x_hat shorter than x?<br/>finding 3"]
+        D4["<b>Dark matter</b><br/>how much of r is linear in x?<br/>finding 4"]
+    end
+
+    f -.-> D1
+    W -.-> D2
+    xh -.-> D3
+    r -.-> D4
+```
+
+---
+
 ## Findings
 
 ### 1. Decoder max-cosine over all columns is a mixture statistic
@@ -54,6 +89,19 @@ vectors in R^768 the max-cosine p99 is 0.1516 at N=1,032 rising to 0.1724 at N=1
 comparisons but decisive for the median: BatchTopK at L0 ≈ 639 has an alive-masked median
 of 0.1112 against a null of 0.1146, meaning its 1,032 surviving directions are **no more
 clustered than chance**.
+
+The corrected statistic, end to end:
+
+```mermaid
+flowchart LR
+    A["All 16,384<br/>decoder columns"] --> S{"Fired at least once<br/>in 1,048,576 tokens?"}
+    S -->|no| X["Dead columns<br/>excluded"]
+    S -->|yes| L["Alive columns<br/>n_alive = 1,032 to 15,846"]
+    L --> M["Max-cosine per column<br/>→ p99, median"]
+    N["Null: n_alive random<br/>unit vectors in R^768"] --> MN["Max-cosine per vector<br/>→ p99, median"]
+    M --> E["Excess over null<br/>comparable across dictionaries"]
+    MN --> E
+```
 
 ### 2. Liveness is a statistic of the token budget, not a property of the dictionary
 
@@ -132,6 +180,8 @@ state-dict conventions:
 
 Seven of eight agree within 0.8%. The eighth is finding 2.
 
+![Deviation from SAEBench's published value for each metric, per checkpoint. All metrics except fraction of latents alive sit within 0.8% of zero.](figures/validation_reproduction.png)
+
 Two further guards are in the code rather than the prose:
 
 - `sweep.validate_streaming` checks the streaming/algebraic implementation against a
@@ -151,8 +201,42 @@ Two further guards are in the code rather than the prose:
 `resid_post_layer_8`, width 2^14, 7 architectures × 6 sparsity levels. Complete sparsity
 ladders for BatchTopK and Gated; JumpReLU in progress.
 
+The seven architectures reach overlapping sparsity ranges, which is what makes comparing
+them at matched L0 possible (shaded band):
+
+![SAEBench published operating points: variance explained and CE loss recovered against L0, for seven architectures at both model scales.](figures/operating_points.png)
+
 The sweep is resumable: `run_sweep.py` reads back completed units from the JSONL and
 skips them, so an interrupted run loses only the dictionary in flight.
+
+---
+
+## Pipeline
+
+```mermaid
+flowchart TD
+    HF["SAEBench checkpoints on Hugging Face<br/>7 architectures × 6 sparsity levels"]
+    DL["saprmarks/dictionary_learning<br/>SAE class definitions"]
+    PY["Pythia-160M-deduped"]
+
+    DL -->|"fetch_reference_impl.py"| DLREF["src/dlref/"]
+    PY -->|"litmus.collect_activations"| BUF["acts_pythia160m_L8.npy<br/>1,048,576 tokens × 768"]
+
+    HF --> V["run_sweep.py: verify pass<br/>load every checkpoint before evaluating any"]
+    DLREF --> V
+    V --> E["sweep.stream_eval<br/>one streaming pass per dictionary"]
+    BUF --> E
+    REF["dictionary_diagnostics.py<br/>dense reference"] -.->|"validate_streaming"| E
+
+    E --> SNAP["snapshot at 204,800 tokens<br/>comparable to SAEBench"]
+    E --> FULL["full 1,048,576 tokens<br/>liveness, density, geometry,<br/>shrinkage, dark matter"]
+    SNAP --> J["sweep_pythia160m.jsonl<br/>appended per dictionary, resumable"]
+    FULL --> J
+    J -.->|"tabulation, nulls, plots:<br/>not yet in src/"| R["results/*.csv<br/>figures/*.png"]
+
+    HF --> LIT["litmus.eval_sae<br/>reproduce published metrics"]
+    BUF --> LIT
+```
 
 ---
 

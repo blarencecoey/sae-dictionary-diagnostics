@@ -15,9 +15,11 @@ the original upstream and does not contain the TopK / BatchTopK / Matryoshka cla
 which live only in the SAEBench fork. It also pulls a heavy dependency that pins an older
 transformers API and attempts to open a log file inside site-packages at import time.
 
-CAVEAT: these paths and the default branch are NOT pinned to a commit. They reflect the
-upstream layout at the time this work was done. Pin REF to a commit SHA before relying on
-this for anything reproducible, and check the upstream licence terms yourself.
+REF is pinned to 43421f59 (2025-01-16), the last upstream commit before the files moved
+under a dictionary_learning/ package directory (0ff88883, 2025-02-11) and the nearest to
+the SAEBench Pythia checkpoints (date-0108). Moving REF past that commit requires
+prefixing every path in FILES. Upstream is MIT-licensed; check its terms yourself before
+redistributing anything fetched here.
 """
 from __future__ import annotations
 
@@ -26,7 +28,7 @@ import sys
 import urllib.request
 
 REPO = "saprmarks/dictionary_learning"
-REF = "main"  # <-- pin to a commit SHA for reproducibility
+REF = "43421f5934a1476cb3f32f0b9e1b5d14b84540a1"  # simplify matryoshka loss, 2025-01-16
 BASE = f"https://raw.githubusercontent.com/{REPO}/{REF}"
 
 FILES = [
